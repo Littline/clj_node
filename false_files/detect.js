@@ -7,6 +7,37 @@ let lastDate=null;
 let lastLines=null;
 let newDate=null;
 let newLines=null;
+const http = require('http');
+
+function sendPostRequest(url,path, body) {
+    const data = JSON.stringify(body);
+    const options = {
+        hostname: url,
+        port: 8081, 
+        path: path,
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json; charset=UTF-8',
+            'Content-Length': Buffer.byteLength(data, 'utf8')
+        }
+    };
+    const req = http.request(options, (res) => {
+        let responseData = '';
+        res.on('data', (chunk) => {
+            responseData += chunk;
+        });
+        res.on('end', () => {
+            console.log('Response:', responseData);
+        });
+    });
+    req.on('error', (error) => {
+        console.error('An error occurred:', error);
+    });
+    // 发送请求主体
+    req.write(data);
+    req.end();
+}
+
 // 1.获取日期最大的文件名称
 // input:
 function getMaxDateFileName(files) {
@@ -14,7 +45,7 @@ function getMaxDateFileName(files) {
   let maxDate = null;
   files.forEach((file) => {
     const match = file.match(/detection_data_([0-9]{4}-[0-9]{2}-[0-9]{2})_false_normal\.csv/);
-    // console.log('匹配结果:', match);
+    // console.log('false匹配结果:', match);
     if (match) {
       const currentDate = new Date(match[1]);
       if (!maxDate || currentDate > maxDate) {
@@ -27,6 +58,39 @@ function getMaxDateFileName(files) {
   return { fileName: maxDateFileName, date: maxDate };
 }
 
+function getMaxTrueDateFileName(files,trueOrFalse) {
+  let maxDateFileName = null;
+  let maxDate = null;
+
+  const regex = new RegExp(`detection_data_([0-9]{4}-[0-9]{2}-[0-9]{2})_${trueOrFalse}_normal\\.csv`);
+
+  files.forEach((file) => {
+    const match = file.match(regex);
+    if (match) {
+      const currentDate = new Date(match[1]);
+      if (!maxDate || currentDate > maxDate) {
+        maxDate = currentDate;
+        maxDateFileName = file;
+      }
+    }
+  });
+  if (!maxDate) {
+    return { fileName: null, date: null };
+  }
+  // 找到比最大日期小一天的文件
+  let oneDayBefore = new Date(maxDate);
+  let targetFileName = null;
+  do {
+    oneDayBefore.setDate(oneDayBefore.getDate() - 1);  // 日期减去一天
+    const formattedDate = oneDayBefore.toISOString().split('T')[0];  // 格式化为YYYY-MM-DD
+    targetFileName = `detection_data_${formattedDate}_${trueOrFalse}_normal.csv`;
+    if (files.includes(targetFileName)) {
+      return { fileName: targetFileName, date: oneDayBefore };
+    }
+
+  } while (oneDayBefore > new Date('1970-01-01')); // 假设文件不会早于1970年
+  return { fileName: null, date: null };
+}
 // 2.读取文件内容
 function readFileContent(fileName) {
   return new Promise((resolve, reject) => {
@@ -174,37 +238,276 @@ function printLogs(){
   console.log('*')
   console.log('*')
   global.flag=global.flag+1
-  if(global.flag>1*24*6){
-    global.errorMessage='已经连续1天未发生故障情况，请悉知';
+  if(global.flag>3*24*6){
+    global.errorMessage='已经连续3天未发生故障情况,请悉知';
     sendEmail()
   }
 }
+function yourFunction(false_max_file_date, true_max_file_date) {
+  return new Promise((resolve, reject) => {
+    if (false_max_file_date && true_max_file_date) {
+      if (false_max_file_date < true_max_file_date) {
+        global.lastBox = global.lastBoxTrue;
+        global.lastTrue = global.lastTrueTmp;
+      } else if (false_max_file_date > true_max_file_date) {
+        global.lastBox = global.lastBoxFalse;
+        global.lastFalse = global.lastFalseTmp;
+        global.lastWarn = global.lastWarnTmp;
+      } else {
+        global.lastBox = global.lastBoxTrue + global.lastBoxFalse;
+        global.lastTrue = global.lastTrueTmp;
+        global.lastFalse = global.lastFalseTmp;
+        global.lastWarn = global.lastWarnTmp;
+      }
+      resolve();
+    } else {
+      console.log('有未定义的日期值，无法比较');
+      reject(new Error('有未定义的日期值，无法比较'));
+    }
+  });
+}
+function updateTodayInfo(callback) {
+  let false_max_file_name = null;
+  let true_max_file_name = null;
+  let false_max_file_date = null;
+  let true_max_file_date = null;
 
+  let max_file_date = null;
 
+  let trueContinuousRanges =null;
+  let falseContinuousRanges =null;
+  let warnContinuousRanges=null;
 
+  let completed = 0;
 
+  function checkCompletion() {
+    
+    completed += 1;
+    if (completed === 2) {
+      yourFunction(false_max_file_date, true_max_file_date)
+        .then(() => callback())
+        .catch((error) => console.error(error));
+    }
+  }
+
+  fs.readdir(global.truePath, (err, files) => {
+    if (err) {
+      console.error('Error reading directory:', err);
+      return;
+    }
+    ({ fileName: true_max_file_name, date: true_max_file_date } = getMaxTrueDateFileName(files,"true"));
+    console.log(true_max_file_name,true_max_file_date)
+    if (!true_max_file_name) {
+      console.log('updateTodayInfo-true-未找到符合条件的文件');
+      callback();
+      return;
+    }
+    readFileCalculateInfo(global.truePath,true_max_file_name)
+                    .then((records) => {
+                      console.log('Parsed true records:', records.length);
+                      trueContinuousRanges = countContinuousRanges(records)
+                      global.lastTrueTmp = trueContinuousRanges
+                      const lastBox = countContinuousRangesWithWeight(records);
+                      global.lastBoxTrue+=lastBox
+                      console.log('True box number:', global.lastBoxTrue);
+                      console.log('Number of true continuous ranges:', trueContinuousRanges);
+                    })
+                    .then(() => checkCompletion())
+                    .catch((err) => {
+                      console.error('Error processing file:', err);
+                    });
+  });
+
+  fs.readdir(global.falsePath, (err, files) => {
+    if (err) {
+      console.error('Error reading directory:', err);
+      return;
+    }
+    ({ fileName: false_max_file_name, date: false_max_file_date } = getMaxTrueDateFileName(files,"false"));
+    console.log(false_max_file_name,false_max_file_date)
+    if (!false_max_file_name) {
+      console.log('updateTodayInfo-false-未找到符合条件的文件');
+      callback();
+      return;
+    }
+    readFileCalculateInfo(global.falsePath,false_max_file_name)
+                    .then((records) => {
+                      console.log('Parsed false records:', records.length);
+                      falseContinuousRanges = countContinuousRanges(records)
+                      global.lastFalseTmp = falseContinuousRanges
+                      warnContinuousRanges=countSpecialContinuousRanges(records)
+                      global.lastWarnTmp = falseContinuousRanges
+                      const lastBox = countContinuousRangesWithWeight(records);
+                      global.lastBoxFalse+=lastBox
+                      console.log('False box number:', global.lastBoxFalse);
+                      console.log('Number of warnContinuousRanges continuous ranges:', warnContinuousRanges);
+                      console.log('Number of fasle continuous ranges:', falseContinuousRanges);
+                    })
+                    .then(() => checkCompletion())
+                    .catch((err) => {
+                      console.error('Error processing file:', err);
+                    });
+  });
+}
+
+function readFileCalculateInfo(filePath, fileName) {
+  return new Promise((resolve, reject) => {
+    fs.readFile(filePath+fileName, 'utf8', (err, data) => {
+      if (err) {
+        console.error('Error reading file:', err);
+        reject(err);
+        return;
+      }
+      // 将文件内容按行分割
+      const lines = data.trim().split('\n');
+      // 获取标头行（第一行），并分割成各个标头
+      const headers = lines[0].split(',');
+      // 用于存储所有记录的数组
+      const records = [];
+      // 遍历除第一行外的每一行
+      for (let i = 1; i < lines.length; i++) {
+        const row = lines[i].split(',');
+        const record = {};
+        // 将标头作为键，列内容作为值
+        headers.forEach((header, index) => {
+          record[header.trim()] = row[index].trim();
+        });
+        // 将生成的记录对象添加到记录数组中
+        records.push(record);
+      }
+      // 将结果数组返回
+      resolve(records);
+      // console.log(records.length)
+    });
+    
+  });
+}
+
+function countContinuousRanges(records) {
+  const sortedIndices = records
+    .map(record => parseInt(record.index, 10))  // 将index转换为整数
+    .sort((a, b) => a - b);  // 对转换后的整数进行排序
+  let rangeCount = 0;
+  let lastIndex = null;
+  // 遍历排序后的索引，统计连续区间的数量
+  sortedIndices.forEach((currentIndex, i) => {
+    if (lastIndex === null || currentIndex !== lastIndex + 1) {
+      // 如果当前索引不连续，则开始一个新范围
+      rangeCount++;
+    }
+    lastIndex = currentIndex;
+  });
+  return rangeCount;
+}
+
+function countSpecialContinuousRanges(records) {
+  const sortedRecords = records
+    .map(record => ({ index: parseInt(record.index, 10), speed2: record.motor_speed2 }))
+    .sort((a, b) => a.index - b.index);
+
+  let rangeCount = 0;
+  let lastIndex = null;
+  let speed2Count = 0;  // 统计满足条件的speed2的次数
+
+  sortedRecords.forEach((record, i) => {
+    if (lastIndex === null || record.index !== lastIndex + 1) {
+      if (speed2Count >= global.speed2Threshold) {
+        rangeCount++;
+      }
+      speed2Count = 0;
+    }
+    if (Math.abs(record.speed2) < 1) {
+      speed2Count++;
+    }
+    lastIndex = record.index;
+  });
+  if (speed2Count >= global.speed2Threshold) {
+    rangeCount++;
+  }
+  return rangeCount;
+}
+
+function countContinuousRangesWithWeight(records) {
+  const sortedRecords = records
+    .map(record => ({
+      index: parseInt(record.index, 10),
+      weight2: record.weight2
+    }))
+    .sort((a, b) => a.index - b.index);
+
+  let rangeCount = 0;
+  let lastIndex = null;
+  let allWeight2GreaterThan10000 = true; 
+
+  sortedRecords.forEach((record, i) => {
+    if (lastIndex === null || record.index !== lastIndex + 1) {
+      if (lastIndex !== null && allWeight2GreaterThan10000) {
+        rangeCount++;
+      }
+      allWeight2GreaterThan10000 = true;
+    }
+    if (record.weight2 <= global.weight) {// 用于标记当前区间内所有weight2是否都大于global.weight
+      allWeight2GreaterThan10000 = false;
+    }
+    lastIndex = record.index;
+  });
+  if (allWeight2GreaterThan10000) {
+    rangeCount++;
+  }
+  return rangeCount;
+}
 
 function executeFunctionChain() {
   executeFunction(() => {
     printVariables(() => {
       printGlobalVariables(() => {
-        // 所有函数执行完毕
         printLogs()
       });
     });
   });
 }
 
-executeFunctionChain()
+//executeFunctionChain()
 // 每隔一定时间间隔执行函数链
 setInterval(executeFunctionChain, 10*60*1000); // 每隔十分钟执行一次
-//setInterval(executeFunctionChain, 30*1000);// 每隔30秒执行一次
-
-// setInterval(executeFunction, 3*1000);
 
 
+const apiUrl = '127.0.0.1';
+
+function calcuteTask() {
+  global.updateTime = new Date().toISOString();
+
+  // 在updateTodayInfo完成后再执行回调函数
+  updateTodayInfo(() => {
+    // 创建body对象
+    const body = {
+      number: `${global.number}`,
+      name: `${global.name}`,
+      lastTrue: global.lastTrue,
+      lastFalse: global.lastFalse,
+      lastWarn: global.lastWarn,
+      lastBox: global.lastBox,
+      todayTrue: global.todayTrue,
+      todayFalse: global.todayFalse,
+      todayWarn: global.todayWarn,
+      todayBox: global.todayBox,
+      weight: global.weight,
+      updateTime: global.updateTime,
+      token: 'clj168168'
+    };
+
+    // 打印body对象
+    console.log("body is: ",body);
+    global.lastBox=0;
+    global.lastBoxFalse=0;
+    global.lastBoxTrue=0;
+    sendPostRequest(apiUrl, '/send/updateNodeInfo', body);
+  });
+}
 
 
-// 调用 sendEmail 函数
-// const sendEmail = require('./sendmail');
-// sendEmail();
+calcuteTask()
+//sendPostRequest(apiUrl,'/send/updateNodeInfo', body);
+//setInterval(calcuteTask, 3*1000); 
+//sendPostRequest(apiUrl,'/send/queryNodeInfo', body);
+
