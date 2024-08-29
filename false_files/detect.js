@@ -78,7 +78,9 @@ function getMaxTrueDateFileName(files,trueOrFalse) {
     return { fileName: null, date: null };
   }
   // 找到比最大日期小一天的文件
-  let oneDayBefore = new Date(maxDate);
+  // let oneDayBefore = new Date(maxDate);
+  const todayDate=new Date();
+  let oneDayBefore = new Date(todayDate);
   let targetFileName = null;
   do {
     oneDayBefore.setDate(oneDayBefore.getDate() - 1);  // 日期减去一天
@@ -86,6 +88,8 @@ function getMaxTrueDateFileName(files,trueOrFalse) {
     targetFileName = `detection_data_${formattedDate}_${trueOrFalse}_normal.csv`;
     if (files.includes(targetFileName)) {
       return { fileName: targetFileName, date: oneDayBefore };
+    }else{
+      console.log("targetFileName is ,",targetFileName)
     }
 
   } while (oneDayBefore > new Date('1970-01-01')); // 假设文件不会早于1970年
@@ -370,7 +374,7 @@ function readFileCalculateInfo(filePath, fileName) {
         const record = {};
         // 将标头作为键，列内容作为值
         headers.forEach((header, index) => {
-          record[header.trim()] = row[index].trim();
+          record[header.trim()] = row[index];
         });
         // 将生成的记录对象添加到记录数组中
         records.push(record);
@@ -472,7 +476,7 @@ function executeFunctionChain() {
 setInterval(executeFunctionChain, 10*60*1000); // 每隔十分钟执行一次
 
 
-const apiUrl = '127.0.0.1';
+const apiUrl = global.APIURL;
 
 function calcuteTask() {
   global.updateTime = new Date().toISOString();
@@ -508,6 +512,6 @@ function calcuteTask() {
 
 calcuteTask()
 //sendPostRequest(apiUrl,'/send/updateNodeInfo', body);
-//setInterval(calcuteTask, 3*1000); 
+setInterval(calcuteTask, 60*1000); 
 //sendPostRequest(apiUrl,'/send/queryNodeInfo', body);
 
