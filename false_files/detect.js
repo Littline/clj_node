@@ -245,6 +245,7 @@ function printLogs(){
   if(global.flag>3*24*6){
     global.errorMessage='已经连续3天未发生故障情况,请悉知';
     sendEmail()
+    global.flag-=24*6
   }
 }
 function yourFunction(false_max_file_date, true_max_file_date) {

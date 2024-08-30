@@ -10,15 +10,17 @@ global.lastRecord={};
 global.lastLine;
 global.flag=0;
 // add new global vars to maintain status
+
 global.APIURL='127.0.0.1';
 global.name='广东顺德';
 global.number='05';
+// global.APIURL='42.194.238.80';
 global.lastTrue = 0;
-global.lastFalse = -1;
-global.lastWarn = -1;
+global.lastFalse = 0;
+global.lastWarn = 0;
 global.lastTrueTmp = 0;
-global.lastFalseTmp = -1;
-global.lastWarnTmp = -1;
+global.lastFalseTmp = 0;
+global.lastWarnTmp = 0;
 global.lastBox = 0;
 global.lastBoxTrue = 0;
 global.lastBoxFalse = 0;
@@ -30,4 +32,4 @@ global.weight = 1000.4;
 global.updateTime = new Date().toISOString();
 global.falsePath = 'E:/clj/new_demo/false_files/qinzhou_01/';
 global.truePath = 'E:/clj/new_demo/false_files/true/';
-global.speed2Threshold = 20;
+global.speed2Threshold = 100;
