@@ -389,25 +389,35 @@ function readFileCalculateInfo(filePath, fileName) {
 
 function countContinuousRanges(records) {
   const sortedIndices = records
-    .map(record => parseInt(record.index, 10))  // 将index转换为整数
-    .sort((a, b) => a - b);  // 对转换后的整数进行排序
+    .map(record => parseInt(record.index, 10))
   let rangeCount = 0;
-  let lastIndex = null;
-  // 遍历排序后的索引，统计连续区间的数量
-  sortedIndices.forEach((currentIndex, i) => {
-    if (lastIndex === null || currentIndex !== lastIndex + 1) {
-      // 如果当前索引不连续，则开始一个新范围
-      rangeCount++;
+  let rangeBegin = null;
+  let rangeEnd = null;
+  // Iterate through the sorted indices
+  for (let i = 0; i < sortedIndices.length; i++) {
+    const currentIndex = sortedIndices[i];
+    if (rangeBegin === null) {
+      rangeBegin = currentIndex;
+      rangeEnd = currentIndex;
+    } else if (currentIndex === rangeEnd + 1) {
+      rangeEnd = currentIndex;
+    } else {
+      if (rangeEnd - rangeBegin > 60) {
+        rangeCount++;  // Count the range if the interval exceeds 60
+      }
+      rangeBegin = currentIndex;
+      rangeEnd = currentIndex;
     }
-    lastIndex = currentIndex;
-  });
+  }
+  if (rangeEnd !== null && rangeEnd - rangeBegin > 60) {
+    rangeCount++;
+  }
   return rangeCount;
 }
 
-function countSpecialContinuousRanges(records) {
+function countSpecialContinuousRanges1(records) {
   const sortedRecords = records
     .map(record => ({ index: parseInt(record.index, 10), speed2: record.motor_speed2 }))
-    .sort((a, b) => a.index - b.index);
 
   let rangeCount = 0;
   let lastIndex = null;
@@ -430,14 +440,45 @@ function countSpecialContinuousRanges(records) {
   }
   return rangeCount;
 }
-
-function countContinuousRangesWithWeight(records) {
+function countSpecialContinuousRanges(records) {
+  const sortedRecords = records
+    .map(record => ({ index: parseInt(record.index, 10), speed2: record.motor_speed2 }))
+  let rangeCount = 0;
+  let rangeBegin = null;
+  let rangeEnd = null;
+  let speed2Count = 0;  // Count of Math.abs(record.speed2) < 1 within the current range
+  for (let i = 0; i < sortedRecords.length; i++) {
+    const record = sortedRecords[i];
+    if (rangeBegin === null) {
+      rangeBegin = record.index;
+      rangeEnd = record.index;
+      speed2Count = Math.abs(record.speed2) < 1 ? 1 : 0;
+    } else if (record.index === rangeEnd + 1) {
+      rangeEnd = record.index;
+      if (Math.abs(record.speed2) < 1) {
+        speed2Count++;
+      }
+    } else {
+      if (speed2Count >= global.speed2Threshold && rangeEnd - rangeBegin > 60) {
+        rangeCount++; 
+      }
+      rangeBegin = record.index;
+      rangeEnd = record.index;
+      speed2Count = Math.abs(record.speed2) < 1 ? 1 : 0;
+    }
+  }
+  if (speed2Count >= global.speed2Threshold) {
+    rangeCount++;
+  }
+  return rangeCount;
+}
+function countContinuousRangesWithWeight1(records) {
   const sortedRecords = records
     .map(record => ({
       index: parseInt(record.index, 10),
       weight2: record.weight2
     }))
-    .sort((a, b) => a.index - b.index);
+    // .sort((a, b) => a.index - b.index);
 
   let rangeCount = 0;
   let lastIndex = null;
@@ -460,7 +501,43 @@ function countContinuousRangesWithWeight(records) {
   }
   return rangeCount;
 }
-
+function countContinuousRangesWithWeight(records) {
+  const sortedRecords = records
+    .map(record => ({
+      index: parseInt(record.index, 10),
+      weight2: record.weight2
+    }))
+    .sort((a, b) => a.index - b.index);  // Sort by index in ascending order
+  let rangeCount = 0;
+  let rangeBegin = null;
+  let rangeEnd = null;
+  let allWeight2GreaterThanThreshold = true;
+  for (let i = 0; i < sortedRecords.length; i++) {
+    const record = sortedRecords[i];
+    if (rangeBegin === null) {
+      rangeBegin = record.index;
+      rangeEnd = record.index;
+      allWeight2GreaterThanThreshold = record.weight2 > global.weight;
+    } else if (record.index === rangeEnd + 1) {
+      rangeEnd = record.index;
+      if (record.weight2 <= global.weight) {
+        allWeight2GreaterThanThreshold = false;
+      }
+    } else {
+      // End of the current range
+      if (allWeight2GreaterThanThreshold&&rangeEnd - rangeBegin > 60) {
+        rangeCount++;  // Count the range if all weight2 values are greater than the threshold
+      }
+      rangeBegin = record.index;
+      rangeEnd = record.index;
+      allWeight2GreaterThanThreshold = record.weight2 > global.weight;
+    }
+  }
+  if (allWeight2GreaterThanThreshold) {
+    rangeCount++;
+  }
+  return rangeCount;
+}
 function executeFunctionChain() {
   executeFunction(() => {
     printVariables(() => {
