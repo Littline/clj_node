@@ -1,7 +1,7 @@
 # clj_node
 测力佳工控机节点
 
-0.拉去文件，安装node
+0.拉取文件，安装node
 
 1.修改globalVars.js中的配置文件
 
