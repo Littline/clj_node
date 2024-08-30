@@ -42,9 +42,10 @@ function motorSpeed2Rule(lastLine, newLine, fileName) {
             motorSpeed2Values.push(power12Value); // 将 'power12' 列的值存入数组
         }
         const negativeOrZeroCount = countNegativeOrZeroValues(motorSpeed2Values);
-        if(negativeOrZeroCount>=200){
+        if(negativeOrZeroCount>=global.speed2Threshold){
             const currentDate = new Date();
-            global.errorMessage='在'+currentDate+'附近发生预报警，'+'原因为新增疑似报警数据中motor_speed2属性超过数200个绝对值小于1';
+            global.errorMessage='在'+currentDate+'附近发生预报警，'+'原因为新增疑似报警数据中motor_speed2属性超过数'+global.speed2Threshold+'个绝对值小于1';
+            global.flag=0;
             console.log('——————————————————warning——————————————————'+'waring——————————————————warning——————————————————');
             sendEmail();
         }

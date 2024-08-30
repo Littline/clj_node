@@ -30,4 +30,4 @@ global.weight = 1000.4;
 global.updateTime = new Date().toISOString();
 global.falsePath = 'E:/clj/new_demo/false_files/qinzhou_01/';
 global.truePath = 'E:/clj/new_demo/false_files/true/';
-global.speed2Threshold = 20;
+global.speed2Threshold = 100;
