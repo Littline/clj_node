@@ -248,21 +248,37 @@ function printLogs(){
     global.flag-=24*6
   }
 }
+function clearTime(date) {
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate());
+}
+
+
 function yourFunction(false_max_file_date, true_max_file_date) {
+  // console.log('false_max_file_date, true_max_file_date'+false_max_file_date+ true_max_file_date)
+  const date1 = clearTime(false_max_file_date);
+  const date2 = clearTime(true_max_file_date);
   return new Promise((resolve, reject) => {
     if (false_max_file_date && true_max_file_date) {
-      if (false_max_file_date < true_max_file_date) {
+      if (date1 < date2) {
         global.lastBox = global.lastBoxTrue;
         global.lastTrue = global.lastTrueTmp;
-      } else if (false_max_file_date > true_max_file_date) {
+        console.log('昨日不存在false文件'+global.lastBox+
+          ' global.lastTrue:'+global.lastTrue+'global.lastFalse'+global.lastFalse+'global.lastWarn'+global.lastWarn);
+        
+      } else if (date1 > date2) {
         global.lastBox = global.lastBoxFalse;
         global.lastFalse = global.lastFalseTmp;
         global.lastWarn = global.lastWarnTmp;
+        console.log('昨日不存在true文件'+global.lastBox+
+          ' global.lastTrue:'+global.lastTrue+'global.lastFalse'+global.lastFalse+'global.lastWarn'+global.lastWarn);
       } else {
         global.lastBox = global.lastBoxTrue + global.lastBoxFalse;
         global.lastTrue = global.lastTrueTmp;
         global.lastFalse = global.lastFalseTmp;
         global.lastWarn = global.lastWarnTmp;
+        console.log('昨日存在true与false文件global.lastBox:'+global.lastBox+
+          ' global.lastTrue:'+global.lastTrue+'global.lastFalse'+global.lastFalse+'global.lastWarn'+global.lastWarn);
+        
       }
       resolve();
     } else {
@@ -416,31 +432,7 @@ function countContinuousRanges(records) {
   return rangeCount;
 }
 
-function countSpecialContinuousRanges1(records) {
-  const sortedRecords = records
-    .map(record => ({ index: parseInt(record.index, 10), speed2: record.motor_speed2 }))
 
-  let rangeCount = 0;
-  let lastIndex = null;
-  let speed2Count = 0;  // 统计满足条件的speed2的次数
-
-  sortedRecords.forEach((record, i) => {
-    if (lastIndex === null || record.index !== lastIndex + 1) {
-      if (speed2Count >= global.speed2Threshold) {
-        rangeCount++;
-      }
-      speed2Count = 0;
-    }
-    if (Math.abs(record.speed2) < 1) {
-      speed2Count++;
-    }
-    lastIndex = record.index;
-  });
-  if (speed2Count >= global.speed2Threshold) {
-    rangeCount++;
-  }
-  return rangeCount;
-}
 function countSpecialContinuousRanges(records) {
   const sortedRecords = records
     .map(record => ({ index: parseInt(record.index, 10), speed2: record.motor_speed2 }))
@@ -473,42 +465,14 @@ function countSpecialContinuousRanges(records) {
   }
   return rangeCount;
 }
-function countContinuousRangesWithWeight1(records) {
-  const sortedRecords = records
-    .map(record => ({
-      index: parseInt(record.index, 10),
-      weight2: record.weight2
-    }))
-    // .sort((a, b) => a.index - b.index);
 
-  let rangeCount = 0;
-  let lastIndex = null;
-  let allWeight2GreaterThan10000 = true; 
-
-  sortedRecords.forEach((record, i) => {
-    if (lastIndex === null || record.index !== lastIndex + 1) {
-      if (lastIndex !== null && allWeight2GreaterThan10000) {
-        rangeCount++;
-      }
-      allWeight2GreaterThan10000 = true;
-    }
-    if (record.weight2 <= global.weight) {// 用于标记当前区间内所有weight2是否都大于global.weight
-      allWeight2GreaterThan10000 = false;
-    }
-    lastIndex = record.index;
-  });
-  if (allWeight2GreaterThan10000) {
-    rangeCount++;
-  }
-  return rangeCount;
-}
 function countContinuousRangesWithWeight(records) {
   const sortedRecords = records
     .map(record => ({
       index: parseInt(record.index, 10),
       weight2: record.weight2
     }))
-    .sort((a, b) => a.index - b.index);  // Sort by index in ascending order
+    // .sort((a, b) => a.index - b.index);  // Sort by index in ascending order
   let rangeCount = 0;
   let rangeBegin = null;
   let rangeEnd = null;
@@ -526,7 +490,7 @@ function countContinuousRangesWithWeight(records) {
       }
     } else {
       // End of the current range
-      if (allWeight2GreaterThanThreshold&&rangeEnd - rangeBegin > 60) {
+      if (allWeight2GreaterThanThreshold&&(rangeEnd - rangeBegin > 60)) {
         rangeCount++;  // Count the range if all weight2 values are greater than the threshold
       }
       rangeBegin = record.index;
@@ -590,6 +554,6 @@ function calcuteTask() {
 
 calcuteTask()
 //sendPostRequest(apiUrl,'/send/updateNodeInfo', body);
-setInterval(calcuteTask, 60*1000); 
+setInterval(calcuteTask,3* 60*1000); 
 //sendPostRequest(apiUrl,'/send/queryNodeInfo', body);
 
