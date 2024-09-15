@@ -33,3 +33,4 @@ global.updateTime = new Date().toISOString();
 global.falsePath = 'E:/clj/new_demo/false_files/qinzhou_01/';
 global.truePath = 'E:/clj/new_demo/false_files/true/';
 global.speed2Threshold = 100;
+global.true7FilesAndDates=[];

@@ -89,12 +89,37 @@ function getMaxTrueDateFileName(files,trueOrFalse) {
     if (files.includes(targetFileName)) {
       return { fileName: targetFileName, date: oneDayBefore };
     }else{
-      console.log("targetFileName is ,",targetFileName)
+      // console.log("targetFileName is ,",targetFileName)
     }
 
   } while (oneDayBefore > new Date('1970-01-01')); // 假设文件不会早于1970年
   return { fileName: null, date: null };
 }
+
+function get7TrueDateFileName(files, trueOrFalse) {
+  let maxDateFileName = null;
+  const todayDate=new Date();
+  let maxDate = new Date(todayDate);
+  //todo 修改为最新日期
+  maxDate.setDate(maxDate.getDate()-7)
+
+  // 从最大日期开始，获取前1到7天的文件名称及日期
+  let results = [];
+  for (let i = 1; i <= 7; i++) {
+    let targetDate = new Date(maxDate);
+    targetDate.setDate(targetDate.getDate() - i);  // 日期减去i天
+    const formattedDate = targetDate.toISOString().split('T')[0];  // 格式化为YYYY-MM-DD
+    const targetFileName = `detection_data_${formattedDate}_${trueOrFalse}_normal.csv`;
+
+    if (files.includes(targetFileName)) {
+      results.push({ fileName: targetFileName, date: targetDate });
+    } else {
+      results.push({ fileName: null, date: targetDate });
+    }
+  }
+  return results;
+}
+
 // 2.读取文件内容
 function readFileContent(fileName) {
   return new Promise((resolve, reject) => {
@@ -432,7 +457,6 @@ function countContinuousRanges(records) {
   return rangeCount;
 }
 
-
 function countSpecialContinuousRanges(records) {
   const sortedRecords = records
     .map(record => ({ index: parseInt(record.index, 10), speed2: record.motor_speed2 }))
@@ -522,6 +546,28 @@ const apiUrl = global.APIURL;
 
 function calcuteTask() {
   global.updateTime = new Date().toISOString();
+  updatePastWeekInfo(()=>{
+    const body = {
+      type:"lastWeek",
+      number: `${global.number}`,
+      name: `${global.name}`,
+      last7True: global.last7True,
+      last7False: global.last7False,
+      last7Warn: global.last7Warn,
+      last7Box: global.last7Box,
+      weight: global.weight,
+      updateTime: global.updateTime,
+      token: 'clj168168'
+    };
+
+    // 打印body对象
+    console.log("last7body is: ",body);
+    global.last7Box = new Array(7).fill(0);
+    global.last7True = new Array(7).fill(0);
+    global.last7False = new Array(7).fill(0);
+    global.last7Warn = new Array(7).fill(0);
+    sendPostRequest(apiUrl, '/send/update7NodeInfo', body);
+  })
 
   // 在updateTodayInfo完成后再执行回调函数
   updateTodayInfo(() => {
@@ -556,4 +602,166 @@ calcuteTask()
 //sendPostRequest(apiUrl,'/send/updateNodeInfo', body);
 setInterval(calcuteTask,3* 60*1000); 
 //sendPostRequest(apiUrl,'/send/queryNodeInfo', body);
+
+function updatePastWeekInfo(callback) {
+  let completed = 0;
+  
+  global.trueWeekInfo = [];  // 存储最近7天的 true 信息
+  global.falseWeekInfo = []; // 存储最近7天的 false 信息
+  
+  function checkCompletion() {
+    completed += 1;
+    if (completed === 2) {
+      processWeekInfo(global.trueWeekInfo, global.falseWeekInfo)
+        .then(() => {
+          printWeekInfo();
+          callback();
+        })
+        .catch((error) => console.error(error));
+    }
+  }
+
+  // 处理过去一周的数据并计算总和
+  function processWeekInfo(trueInfo, falseInfo) {
+    return new Promise((resolve, reject) => {
+      if (trueInfo.length > 0 && falseInfo.length > 0) {
+        // 初始化七个变量（数组），每个数组包含7天的数据
+        global.last7Box = new Array(7).fill(0);
+        global.last7True = new Array(7).fill(0);
+        global.last7False = new Array(7).fill(0);
+        global.last7Warn = new Array(7).fill(0);
+  
+        for (let i = 0; i < 7; i++) {
+          const trueDate = trueInfo[i]?.date || null;
+          const falseDate = falseInfo[i]?.date || null;
+          const trueBox = trueInfo[i]?.box || 0;
+          const falseBox = falseInfo[i]?.box || 0;
+          const trueRange = trueInfo[i]?.continuousRanges || 0;
+          const falseRange = falseInfo[i]?.continuousRanges || 0;
+          const warnRange = falseInfo[i]?.warnContinuousRanges || 0;
+  
+          if (trueDate && falseDate) {
+            const date1 = clearTime(falseDate);
+            const date2 = clearTime(trueDate);
+  
+            if (date1 < date2) {
+              global.last7Box[i] = trueBox;
+              global.last7True[i] = trueRange;
+            } else if (date1 > date2) {
+              global.last7Box[i] = falseBox;
+              global.last7False[i] = falseRange;
+              global.last7Warn[i] = warnRange;
+            } else {
+              global.last7Box[i] = trueBox + falseBox;
+              global.last7True[i] = trueRange;
+              global.last7False[i] = falseRange;
+              global.last7Warn[i] = warnRange;
+            }
+          } else if (trueDate) {
+            global.last7Box[i] = trueBox;
+            global.last7True[i] = trueRange;
+          } else if (falseDate) {
+            global.last7Box[i] = falseBox;
+            global.last7False[i] = falseRange;
+            global.last7Warn[i] = warnRange;
+          } else {
+            console.log('No valid file data for day:', i + 1);
+          }
+        }
+        resolve();
+      } else {
+        reject(new Error('Missing data for true or false paths.'));
+      }
+    });
+  }
+
+  // 打印最近7天的全部信息
+  function printWeekInfo() {
+    console.log('---- 最近七天的信息 ----');
+    for (let i = 0; i < 7; i++) {
+      console.log(`Day -${i + 1}:`);
+      console.log('True Info:', global.trueWeekInfo[i] || 'No true file');
+      console.log('False Info:', global.falseWeekInfo[i] || 'No false file');
+    }
+    console.log(`Total last7Box: ${global.last7Box}`);
+    console.log(`Total last7True: ${global.last7True}`);
+    console.log(`Total last7False: ${global.last7False}`);
+    console.log(`Total last7Warn: ${global.last7Warn}`);
+    console.log('------------------------');
+  }
+
+  // 读取 true 路径的文件并存储过去7天的信息
+  fs.readdir(global.truePath, (err, files) => {
+    if (err) {
+      console.error('Error reading directory:', err);
+      return;
+    }
+    
+    (async () => {
+      global.true7FilesAndDates = get7TrueDateFileName(files, "true");
+    
+      for (let i = 0; i < 7; i++) {
+        const entry = global.true7FilesAndDates[i];
+    
+        // 处理 entry 为 null 或缺少属性的情况
+        if (entry && entry.fileName) {
+          const { fileName, date } = entry;
+          try {
+            const records = await readFileCalculateInfo(global.truePath, fileName);
+            console.log('Parsed true records for day', i + 1, ':', records.length);
+            const continuousRanges = countContinuousRanges(records);
+            const lastBox = countContinuousRangesWithWeight(records);
+            global.trueWeekInfo.push({ date, box: lastBox, continuousRanges });
+            // console.log(global.trueWeekInfo, " ** ", i);
+          } catch (err) {
+            console.error('Error processing file:', err);
+          }
+        } else {
+          // 如果 entry 为 null 或 fileName 不存在，添加 null
+          global.trueWeekInfo.push(null);
+          // console.log(global.trueWeekInfo, " ** ", i);
+        }
+    
+        // 在最后一次迭代时调用 checkCompletion
+        if (i === 6) checkCompletion();
+      }
+    })();
+  });
+
+  // 读取 false 路径的文件并存储过去7天的信息
+  fs.readdir(global.falsePath, (err, files) => {
+    if (err) {
+      console.error('Error reading directory:', err);
+      return;
+    }
+    (async () => {
+      global.false7FilesAndDates = get7TrueDateFileName(files, "false");
+      console.log(global.false7FilesAndDates);
+
+      for (let i = 0; i < 7; i++) {
+        const { fileName, date } = global.false7FilesAndDates[i];
+        if (fileName) {
+          readFileCalculateInfo(global.falsePath, fileName)
+            .then((records) => {
+              console.log('Parsed false records for day', i + 1, ':', records.length);
+              const continuousRanges = countContinuousRanges(records);
+              const warnContinuousRanges = countSpecialContinuousRanges(records);
+              const lastBox = countContinuousRangesWithWeight(records);
+              global.falseWeekInfo.push({ date, box: lastBox, continuousRanges, warnContinuousRanges });
+            })
+            .then(() => {
+              if (i === 6) checkCompletion();
+            })
+            .catch((err) => {
+              console.error('Error processing file:', err);
+            });
+        } else {
+          global.falseWeekInfo.push(null);
+        }
+        if (i === 6) checkCompletion();
+        
+      }
+    })();
+  });
+}
 
