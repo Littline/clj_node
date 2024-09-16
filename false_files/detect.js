@@ -100,12 +100,11 @@ function get7TrueDateFileName(files, trueOrFalse) {
   let maxDateFileName = null;
   const todayDate=new Date();
   let maxDate = new Date(todayDate);
-  //todo 修改为最新日期
-  maxDate.setDate(maxDate.getDate()-7)
+  maxDate.setDate(maxDate.getDate())
 
-  // 从最大日期开始，获取前1到7天的文件名称及日期
+  // 从最大日期开始，获取前1到global.daysNumber天的文件名称及日期
   let results = [];
-  for (let i = 1; i <= 7; i++) {
+  for (let i = 1; i <= global.daysNumber; i++) {
     let targetDate = new Date(maxDate);
     targetDate.setDate(targetDate.getDate() - i);  // 日期减去i天
     const formattedDate = targetDate.toISOString().split('T')[0];  // 格式化为YYYY-MM-DD
@@ -562,10 +561,10 @@ function calcuteTask() {
 
     // 打印body对象
     console.log("last7body is: ",body);
-    global.last7Box = new Array(7).fill(0);
-    global.last7True = new Array(7).fill(0);
-    global.last7False = new Array(7).fill(0);
-    global.last7Warn = new Array(7).fill(0);
+    global.last7Box = new Array(global.daysNumber).fill(0);
+    global.last7True = new Array(global.daysNumber).fill(0);
+    global.last7False = new Array(global.daysNumber).fill(0);
+    global.last7Warn = new Array(global.daysNumber).fill(0);
     sendPostRequest(apiUrl, '/send/update7NodeInfo', body);
   })
 
@@ -606,8 +605,8 @@ setInterval(calcuteTask,3* 60*1000);
 function updatePastWeekInfo(callback) {
   let completed = 0;
   
-  global.trueWeekInfo = [];  // 存储最近7天的 true 信息
-  global.falseWeekInfo = []; // 存储最近7天的 false 信息
+  global.trueWeekInfo = [];  // 存储最近global.daysNumber天的 true 信息
+  global.falseWeekInfo = []; // 存储最近global.daysNumber天的 false 信息
   
   function checkCompletion() {
     completed += 1;
@@ -625,13 +624,13 @@ function updatePastWeekInfo(callback) {
   function processWeekInfo(trueInfo, falseInfo) {
     return new Promise((resolve, reject) => {
       if (trueInfo.length > 0 && falseInfo.length > 0) {
-        // 初始化七个变量（数组），每个数组包含7天的数据
-        global.last7Box = new Array(7).fill(0);
-        global.last7True = new Array(7).fill(0);
-        global.last7False = new Array(7).fill(0);
-        global.last7Warn = new Array(7).fill(0);
+        // 初始化4个变量（数组），每个数组包含global.daysNumber天的数据
+        global.last7Box = new Array(global.daysNumber).fill(0);
+        global.last7True = new Array(global.daysNumber).fill(0);
+        global.last7False = new Array(global.daysNumber).fill(0);
+        global.last7Warn = new Array(global.daysNumber).fill(0);
   
-        for (let i = 0; i < 7; i++) {
+        for (let i = 0; i < global.daysNumber; i++) {
           const trueDate = trueInfo[i]?.date || null;
           const falseDate = falseInfo[i]?.date || null;
           const trueBox = trueInfo[i]?.box || 0;
@@ -677,8 +676,8 @@ function updatePastWeekInfo(callback) {
 
   // 打印最近7天的全部信息
   function printWeekInfo() {
-    console.log('---- 最近七天的信息 ----');
-    for (let i = 0; i < 7; i++) {
+    console.log('---- 最近',global.daysNumber,'天的信息 ----');
+    for (let i = 0; i < global.daysNumber; i++) {
       console.log(`Day -${i + 1}:`);
       console.log('True Info:', global.trueWeekInfo[i] || 'No true file');
       console.log('False Info:', global.falseWeekInfo[i] || 'No false file');
@@ -690,7 +689,7 @@ function updatePastWeekInfo(callback) {
     console.log('------------------------');
   }
 
-  // 读取 true 路径的文件并存储过去7天的信息
+  // 读取 true 路径的文件并存储过去global.daysNumber天的信息
   fs.readdir(global.truePath, (err, files) => {
     if (err) {
       console.error('Error reading directory:', err);
@@ -700,7 +699,7 @@ function updatePastWeekInfo(callback) {
     (async () => {
       global.true7FilesAndDates = get7TrueDateFileName(files, "true");
     
-      for (let i = 0; i < 7; i++) {
+      for (let i = 0; i < global.daysNumber; i++) {
         const entry = global.true7FilesAndDates[i];
     
         // 处理 entry 为 null 或缺少属性的情况
@@ -723,12 +722,12 @@ function updatePastWeekInfo(callback) {
         }
     
         // 在最后一次迭代时调用 checkCompletion
-        if (i === 6) checkCompletion();
+        if (i === global.daysNumber-1) checkCompletion();
       }
     })();
   });
 
-  // 读取 false 路径的文件并存储过去7天的信息
+  // 读取 false 路径的文件并存储过去global.daysNumber天的信息
   fs.readdir(global.falsePath, (err, files) => {
     if (err) {
       console.error('Error reading directory:', err);
@@ -738,7 +737,7 @@ function updatePastWeekInfo(callback) {
       global.false7FilesAndDates = get7TrueDateFileName(files, "false");
       console.log(global.false7FilesAndDates);
 
-      for (let i = 0; i < 7; i++) {
+      for (let i = 0; i < global.daysNumber; i++) {
         const { fileName, date } = global.false7FilesAndDates[i];
         if (fileName) {
           readFileCalculateInfo(global.falsePath, fileName)
@@ -749,16 +748,16 @@ function updatePastWeekInfo(callback) {
               const lastBox = countContinuousRangesWithWeight(records);
               global.falseWeekInfo.push({ date, box: lastBox, continuousRanges, warnContinuousRanges });
             })
-            .then(() => {
-              if (i === 6) checkCompletion();
-            })
+            // .then(() => {
+            //   if (i === global.daysNumber-1) checkCompletion();
+            // })
             .catch((err) => {
               console.error('Error processing file:', err);
             });
         } else {
           global.falseWeekInfo.push(null);
         }
-        if (i === 6) checkCompletion();
+        if (i === global.daysNumber-1) checkCompletion();
         
       }
     })();
