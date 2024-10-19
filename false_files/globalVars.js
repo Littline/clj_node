@@ -1,7 +1,7 @@
 global.testVar = 'This is a global variable';
 // global.path = 'D:/guimain-v1.2/detect_result/daily/false/';
 // global.place="宁波梅山1";
-global.path = 'E:/clj/new_demo/false_files/qinzhou_01/';
+global.path = 'E:/clj/new_demo/false_files/false/';
 global.place='测试用例01';
 global.errorMessage;
 global.newRecord={};
@@ -30,7 +30,7 @@ global.todayWarn = 0;
 global.todayBox = 0;
 global.weight = 1000.4;
 global.updateTime = new Date().toISOString();
-global.falsePath = 'E:/clj/new_demo/false_files/qinzhou_01/';
+global.falsePath = 'E:/clj/new_demo/false_files/false/';
 global.truePath = 'E:/clj/new_demo/false_files/true/';
 global.speed2Threshold = 100;
 global.true7FilesAndDates=[];
