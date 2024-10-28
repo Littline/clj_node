@@ -35,4 +35,4 @@ global.truePath = 'E:/clj/new_demo/clj_node/true/';
 global.speed2Threshold = 100;
 global.true7FilesAndDates=[];
 global.daysNumber=15;
-global.emptySpinnerWeight=8600;
+global.emptySpinnerWeight=10600;

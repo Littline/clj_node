@@ -427,8 +427,59 @@ function readFileCalculateInfo(filePath, fileName) {
     
   });
 }
-
 function countContinuousRanges(records) {
+  if (records.length === 0) return 0;
+  let count = 0;  // 统计满足条件的区间个数
+  let start = 0;  // 记录当前区间的起始索引
+  for (let i = 1; i < records.length; i++) {
+      // 将 index 转换为整数（这里使用四舍五入）
+      const currentIndex = Math.round(records[i].index);
+      const previousIndex = Math.round(records[i - 1].index);
+      // 如果当前记录的 index 与前一条记录的 index 不连续
+      if (currentIndex !== previousIndex + 1) {
+          if (i - start > 60) {  // 判断区间长度是否大于60
+              count++;
+          }
+          start = i;  // 更新新的区间起点
+      }
+  }
+  // 最后一个区间也需要检查
+  if (records.length - start > 60) {
+      count++;
+  }
+  return count;
+}
+
+function countContinuousRanges_EventNum(records) {
+  let rangeCount = 0;
+  let rangeLength = 0;
+  let currentEventNum = null;
+
+  // Iterate through the records using the 'event_num' field to determine if it stays the same for 60 consecutive entries
+  for (let i = 0; i < records.length; i++) {
+    const eventNum = records[i].event_num;
+    if (currentEventNum === null) {
+      currentEventNum = eventNum;
+      rangeLength = 1;
+    } else if (eventNum === currentEventNum) {
+      rangeLength++;
+    } else {
+      if (rangeLength >= 60) {
+        rangeCount++;
+      }
+      currentEventNum = eventNum;
+      rangeLength = 1;
+    }
+  }
+  // Check the last range after the loop
+  if (rangeLength >= 60) {
+    rangeCount++;
+  }
+  return rangeCount;
+}
+
+
+function countContinuousRanges111(records) {
   const sortedIndices = records
     .map(record => parseInt(record.index, 10))
   let rangeCount = 0;
@@ -518,6 +569,8 @@ function countContinuousRangesWithWeight(records) {
         const sum = trimmedValues.reduce((a, b) => a + b, 0);
         const average = sum / trimmedValues.length;
         if (average > global.weight + global.emptySpinnerWeight) {
+          let temsum=global.weight + global.emptySpinnerWeight
+          // console.log("average is "+average +"global.weight + global.emptySpinnerWeight is"+ temsum)
           rangeCount++;
         }
       }
@@ -712,7 +765,7 @@ function updatePastWeekInfo(callback) {
           const { fileName, date } = entry;
           try {
             const records = await readFileCalculateInfo(global.truePath, fileName);
-            console.log('Parsed true records for day', i + 1, ':', records.length);
+            console.log('Parsed true records for day', i + 1, ':', records.length,'filename is:',fileName);
             const continuousRanges = countContinuousRanges(records);
             const lastBox = countContinuousRangesWithWeight(records);
             global.trueWeekInfo.push({ date, box: lastBox, continuousRanges });
@@ -753,9 +806,6 @@ function updatePastWeekInfo(callback) {
               const lastBox = countContinuousRangesWithWeight(records);
               global.falseWeekInfo.push({ date, box: lastBox, continuousRanges, warnContinuousRanges });
             })
-            // .then(() => {
-            //   if (i === global.daysNumber-1) checkCompletion();
-            // })
             .catch((err) => {
               console.error('Error processing file:', err);
             });
@@ -767,141 +817,4 @@ function updatePastWeekInfo(callback) {
       }
     })();
   });
-}
-
-function updatePastWeekInfo1(callback) {
-  let completed = 0;
-
-  global.trueWeekInfo = [];  // 存储最近global.daysNumber天的 true 信息
-  global.falseWeekInfo = []; // 存储最近global.daysNumber天的 false 信息
-
-  // 存储所有已完成的日期，用于检查是否可以进行计算
-  const dateMap = new Map(); 
-
-  function checkCompletion() {
-    completed += 1;
-    if (completed === global.daysNumber * 2) {
-      // 处理所有天的数据
-      processMissingDays();
-      processWeekInfo(global.trueWeekInfo, global.falseWeekInfo)
-        .then(() => {
-          printWeekInfo();
-          callback();
-        })
-        .catch((error) => console.error(error));
-    }
-  }
-
-  // 处理当前日期的数据
-  function addData(info, isTrue) {
-    const dateKey = info.date;
-
-    if (!dateMap.has(dateKey)) {
-      dateMap.set(dateKey, { true: null, false: null });
-    }
-
-    const dataEntry = dateMap.get(dateKey);
-    if (isTrue) {
-      dataEntry.true = info;
-      global.trueWeekInfo.push(info);
-    } else {
-      dataEntry.false = info;
-      global.falseWeekInfo.push(info);
-    }
-
-    // 检查是否可以计算
-    if (dataEntry.true || dataEntry.false) {
-      checkCompletion();
-    }
-
-    if (dataEntry.true && dataEntry.false) {
-      calculateDayInfo(dataEntry.true, dataEntry.false);
-    }
-  }
-
-  // 单独处理某一天的 true 和 false 信息
-  function calculateDayInfo(trueInfo, falseInfo) {
-    const trueDate = trueInfo?.date || null;
-    const falseDate = falseInfo?.date || null;
-    const trueBox = trueInfo?.box || 0;
-    const falseBox = falseInfo?.box || 0;
-    const trueRange = trueInfo?.continuousRanges || 0;
-    const falseRange = falseInfo?.continuousRanges || 0;
-    const warnRange = falseInfo?.warnContinuousRanges || 0;
-
-    const i = global.trueWeekInfo.indexOf(trueInfo);
-
-    if (trueDate && falseDate) {
-      const date1 = clearTime(falseDate);
-      const date2 = clearTime(trueDate);
-
-      if (date1 < date2) {
-        global.last7Box[i] = trueBox;
-        global.last7True[i] = trueRange;
-      } else if (date1 > date2) {
-        global.last7Box[i] = falseBox;
-        global.last7False[i] = falseRange;
-        global.last7Warn[i] = warnRange;
-      } else {
-        global.last7Box[i] = trueBox + falseBox;
-        global.last7True[i] = trueRange;
-        global.last7False[i] = falseRange;
-        global.last7Warn[i] = warnRange;
-      }
-    } else if (trueDate) {
-      global.last7Box[i] = trueBox;
-      global.last7True[i] = trueRange;
-    } else if (falseDate) {
-      global.last7Box[i] = falseBox;
-      global.last7False[i] = falseRange;
-      global.last7Warn[i] = warnRange;
-    } else {
-      console.log('No valid file data for day:', i + 1);
-    }
-  }
-
-  // 处理过去一周的数据并计算总和
-  function processWeekInfo(trueInfo, falseInfo) {
-    return new Promise((resolve, reject) => {
-      if (trueInfo.length > 0 || falseInfo.length > 0) {
-        // 初始化4个变量（数组），每个数组包含global.daysNumber天的数据
-        global.last7Box = new Array(global.daysNumber).fill(0);
-        global.last7True = new Array(global.daysNumber).fill(0);
-        global.last7False = new Array(global.daysNumber).fill(0);
-        global.last7Warn = new Array(global.daysNumber).fill(0);
-
-        for (let i = 0; i < global.daysNumber; i++) {
-          calculateDayInfo(trueInfo[i], falseInfo[i]);
-        }
-
-        resolve();
-      } else {
-        reject(new Error('Missing data for true or false paths.'));
-      }
-    });
-  }
-
-  // 处理某些日期缺少文件的情况
-  function processMissingDays() {
-    for (let i = 0; i < global.daysNumber; i++) {
-      const date = new Date();
-      date.setDate(date.getDate() - i);
-
-      const dateKey = date.toISOString().split('T')[0];  // 转换为 yyyy-mm-dd 格式
-
-      if (!dateMap.has(dateKey)) {
-        dateMap.set(dateKey, { true: null, false: null });
-      }
-
-      const dataEntry = dateMap.get(dateKey);
-
-      // 如果某天缺少 true 或 false 的数据，补充默认值
-      if (!dataEntry.true) {
-        global.trueWeekInfo.push({ date: dateKey, box: 0, continuousRanges: 0 });
-      }
-      if (!dataEntry.false) {
-        global.falseWeekInfo.push({ date: dateKey, box: 0, continuousRanges: 0, warnContinuousRanges: 0 });
-      }
-    }
-  }
 }
