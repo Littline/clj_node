@@ -1,5 +1,6 @@
 ﻿const fs = require('fs');
-require('./globalVars');
+require('./globalVars');  // 引入并赋值给 local variable
+
 const motorSpeed2Rule = require('./alarmRules');
 const sendEmail = require('./sendmail');
 const path = global.path;
@@ -427,6 +428,7 @@ function readFileCalculateInfo(filePath, fileName) {
     
   });
 }
+//正常的运行次数
 function countContinuousRanges(records) {
   if (records.length === 0) return 0;
   let count = 0;  // 统计满足条件的区间个数
@@ -450,64 +452,33 @@ function countContinuousRanges(records) {
   return count;
 }
 
-function countContinuousRanges_EventNum(records) {
-  let rangeCount = 0;
-  let rangeLength = 0;
-  let currentEventNum = null;
 
-  // Iterate through the records using the 'event_num' field to determine if it stays the same for 60 consecutive entries
-  for (let i = 0; i < records.length; i++) {
-    const eventNum = records[i].event_num;
-    if (currentEventNum === null) {
-      currentEventNum = eventNum;
-      rangeLength = 1;
-    } else if (eventNum === currentEventNum) {
-      rangeLength++;
-    } else {
-      if (rangeLength >= 60) {
-        rangeCount++;
-      }
-      currentEventNum = eventNum;
-      rangeLength = 1;
+//异常的运行次数，也即报警
+function countContinuousRangesWarning(records) {
+  if (records.length === 0) return 0;
+  let count = 0;  // 统计满足条件的区间个数
+  let start = 0;  // 记录当前区间的起始索引
+  for (let i = 1; i < records.length; i++) {
+    if(Math.round(records[i].event_type)===1)continue;
+    const currentIndex = Math.round(records[i].index);
+    const previousIndex = Math.round(records[i - 1].index);
+
+    if (currentIndex !== previousIndex + 1 && Math.round(records[i].event_num)!==Math.round(records[i-1].event_num)) {
+        if (i - start > 60) {  // 判断区间长度是否大于60
+            // console.log("i - start",i - start);
+            count++;
+        }
+        start = i;  // 更新新的区间起点
     }
   }
-  // Check the last range after the loop
-  if (rangeLength >= 60) {
-    rangeCount++;
+  // 最后一个区间也需要检查
+  if (records.length - start > 60) {
+      count++;
   }
-  return rangeCount;
+  return count;
 }
-
-
-function countContinuousRanges111(records) {
-  const sortedIndices = records
-    .map(record => parseInt(record.index, 10))
-  let rangeCount = 0;
-  let rangeBegin = null;
-  let rangeEnd = null;
-  // Iterate through the sorted indices
-  for (let i = 0; i < sortedIndices.length; i++) {
-    const currentIndex = sortedIndices[i];
-    if (rangeBegin === null) {
-      rangeBegin = currentIndex;
-      rangeEnd = currentIndex;
-    } else if (currentIndex === rangeEnd + 1) {
-      rangeEnd = currentIndex;
-    } else {
-      if (rangeEnd - rangeBegin > 60) {
-        rangeCount++;  // Count the range if the interval exceeds 60
-      }
-      rangeBegin = currentIndex;
-      rangeEnd = currentIndex;
-    }
-  }
-  if (rangeEnd !== null && rangeEnd - rangeBegin > 60) {
-    rangeCount++;
-  }
-  return rangeCount;
-}
-
-function countSpecialContinuousRanges(records) {
+//故障1
+function countSpecialContinuousRanges1(records) {
   const sortedRecords = records
     .map(record => ({ index: parseInt(record.index, 10), speed2: record.motor_speed2 }))
   let rangeCount = 0;
@@ -539,59 +510,153 @@ function countSpecialContinuousRanges(records) {
   }
   return rangeCount;
 }
+//故障（仿照箱量进行计算
+function countSpecialContinuousRanges2(records) {
+  if (records.length === 0) return 0;
+  let count = 0;  // 统计满足条件的区间个数
+  let start = 0;  // 记录当前区间的起始索引
+  let lastState = false;  // 记录上一个有效状态
+  let temsum=global.weight + global.emptySpinnerWeight;
+  temsum=0;
+  for (let i = 1; i < records.length; i++) {
+    if (Math.round(records[i].event_type) === 1) continue;
+    const currentIndex = Math.round(records[i].index);
+    const previousIndex = Math.round(records[i - 1].index);
+    if (currentIndex !== previousIndex + 1 && Math.round(records[i].event_num) !== Math.round(records[i - 1].event_num)) {
+      if (i - start > 60) {  // 判断区间长度是否大于60
+        const rangeWeights = records.slice(start, start+60).map(record => parseFloat(record.weight2.trim()));
+        rangeWeights.sort((a, b) => a - b);
+        const trimmedWeights = rangeWeights.slice(20, rangeWeights.length - 20);
+        // console.log("rangeWeights",rangeWeights.length)
+        const averageWeight2 = trimmedWeights.reduce((sum, weight) => sum + weight, 0) / trimmedWeights.length;
 
-function countContinuousRangesWithWeight(records) {
-  const sortedRecords = records
-    .map(record => ({
-      index: parseInt(record.index, 10),
-      weight2: parseFloat(record.weight2.trim())
-    }))
-    // .sort((a, b) => a.index - b.index);  // Sort by index in ascending order
-  let rangeCount = 0;
-  let rangeBegin = null;
-  let rangeEnd = null;
-  let weight2Values = [];
-  for (let i = 0; i < sortedRecords.length; i++) {
-    const record = sortedRecords[i];
-    if (rangeBegin === null) {
-      rangeBegin = record.index;
-      rangeEnd = record.index;
-      weight2Values = [record.weight2];
-    } else if (record.index === rangeEnd + 1) {
-      rangeEnd = record.index;
-      weight2Values.push(record.weight2);
-    } else {
-      // End of the current range
-      if ((weight2Values.length > 40)&&(rangeEnd - rangeBegin > 60)) {
-        // Sort and remove the lowest 20 and highest 20 weights
-        weight2Values.sort((a, b) => a - b);
-        const trimmedValues = weight2Values.slice(20, weight2Values.length - 20);
-        const sum = trimmedValues.reduce((a, b) => a + b, 0);
-        const average = sum / trimmedValues.length;
-        if (average > global.weight + global.emptySpinnerWeight) {
-          let temsum=global.weight + global.emptySpinnerWeight
-          // console.log("average is "+average +"global.weight + global.emptySpinnerWeight is"+ temsum)
-          rangeCount++;
+        const rangeSpeed2s = records.slice(start, i).map(record => parseFloat(record.motor_speed2.trim()));
+        const speed2Count=rangeSpeed2s.filter(speed2 => Math.abs(speed2) < 1).length;
+        
+        if (averageWeight2 >temsum) {
+          // 只有当状态变化时才增加计数
+          if (!lastState&&speed2Count>=global.speed2Threshold) {
+            console.log("rangeWeights.length",rangeWeights.length,"rangeSpeed2s.length",rangeSpeed2s.length,"rangeSpeed2s",rangeSpeed2s)
+            count++;
+            lastState = true;  // 更新状态，表示已增加过计数
+          }
+        } else {
+          lastState = false;  // 如果不满足条件，重置状态
         }
+        
       }
-      rangeBegin = record.index;
-      rangeEnd = record.index;
-      weight2Values = [record.weight2];
+      start = i;  // 更新新的区间起点
     }
   }
-  // Handle the last range
-  if (weight2Values.length > 40) {
-    weight2Values.sort((a, b) => a - b);
-    const trimmedValues = weight2Values.slice(20, weight2Values.length - 20);
-    const sum = trimmedValues.reduce((a, b) => a + b, 0);
-    const average = sum / trimmedValues.length;
-
-    if (average > global.weight) {
-      rangeCount++;
-    }
-  }
-  return rangeCount;
 }
+
+  //故障（仿照运行次数进行计算
+function countSpecialContinuousRanges(records) {
+  if (records.length === 0) return 0;
+  let count = 0;  // 统计满足条件的区间个数
+  let start = 0;  // 记录当前区间的起始索引
+  let temsum=global.weight + global.emptySpinnerWeight;
+  temsum=0;
+  for (let i = 1; i < records.length; i++) {
+    if (Math.round(records[i].event_type) === 1) continue;
+    const currentIndex = Math.round(records[i].index);
+    const previousIndex = Math.round(records[i - 1].index);
+    if (currentIndex !== previousIndex + 1 && Math.round(records[i].event_num) !== Math.round(records[i - 1].event_num)) {
+      if (i - start > 60) {  // 判断区间长度是否大于60
+        //根据前60条记录计算重量
+        const rangeWeights = records.slice(start, start+60).map(record => parseFloat(record.weight2.trim()));
+        rangeWeights.sort((a, b) => a - b);
+        const trimmedWeights = rangeWeights.slice(20, rangeWeights.length - 20);
+        const averageWeight2 = trimmedWeights.reduce((sum, weight) => sum + weight, 0) / trimmedWeights.length;
+        //根据全部记录计算速度
+        const rangeSpeed2s = records.slice(start, i).map(record => parseFloat(record.motor_speed2.trim()));
+        const speed2Count=rangeSpeed2s.filter(speed2 => Math.abs(speed2) < 1).length;
+        
+        if (averageWeight2 >temsum) {
+          if (speed2Count>=global.speed2Threshold) {
+            console.log("rangeWeights.length",rangeWeights.length,"rangeSpeed2s.length",rangeSpeed2s.length,"rangeSpeed2s",rangeSpeed2s)
+            count++;
+          }
+        }
+        
+      }
+      start = i;  // 更新新的区间起点
+    }
+  }
+  
+  // 最后一个区间也需要检查
+  if (records.length - start > 60) {
+    const rangeWeights = records.slice(start,start, start+60).map(record => parseFloat(record.weight2.trim()));
+    rangeWeights.sort((a, b) => a - b);
+    const trimmedWeights = rangeWeights.slice(20, rangeWeights.length - 20);
+
+    const rangeSpeed2s = records.slice(start).map(record => parseFloat(record.motor_speed2.trim()));
+    const speed2Count=rangeSpeed2s.filter(speed2 => Math.abs(speed2) < 1).length;
+    if (trimmedWeights.length > 0) {
+      const averageWeight2 = trimmedWeights.reduce((sum, weight) => sum + weight, 0) / trimmedWeights.length;
+      
+      if (averageWeight2 >temsum&&speed2Count>global.speed2Threshold) {
+          count++;
+      }
+    }
+  }
+  
+  return count;
+}
+
+//箱量
+function countContinuousRangesWithWeight(records) {
+  if (records.length === 0) return 0;
+  let count = 0;  // 统计满足条件的区间个数
+  let start = 0;  // 记录当前区间的起始索引
+  let lastState = false;  // 记录上一个有效状态
+  let temsum=global.weight + global.emptySpinnerWeight
+  for (let i = 1; i < records.length; i++) {
+    if (Math.round(records[i].event_type) === 1) continue;
+    const currentIndex = Math.round(records[i].index);
+    const previousIndex = Math.round(records[i - 1].index);
+    if (currentIndex !== previousIndex + 1 && Math.round(records[i].event_num) !== Math.round(records[i - 1].event_num)) {
+      if (i - start > 60) {  // 判断区间长度是否大于60
+        const rangeWeights = records.slice(start, i).map(record => parseFloat(record.weight2.trim()));
+        rangeWeights.sort((a, b) => a - b);
+        const trimmedWeights = rangeWeights.slice(20, rangeWeights.length - 20);
+        // console.log("rangeWeights",rangeWeights.length)
+        const averageWeight2 = trimmedWeights.reduce((sum, weight) => sum + weight, 0) / trimmedWeights.length;
+        
+        if (averageWeight2 >temsum) {
+          // 只有当状态变化时才增加计数
+          if (!lastState) {
+            count++;
+            lastState = true;  // 更新状态，表示已增加过计数
+          }
+        } else {
+          lastState = false;  // 如果不满足条件，重置状态
+        }
+        
+      }
+      start = i;  // 更新新的区间起点
+    }
+  }
+  
+  // 最后一个区间也需要检查
+  if (records.length - start > 60) {
+    const rangeWeights = records.slice(start).map(record => parseFloat(record.weight2.trim()));
+    rangeWeights.sort((a, b) => a - b);
+    const trimmedWeights = rangeWeights.slice(20, rangeWeights.length - 20);
+    
+    if (trimmedWeights.length > 0) {
+      const averageWeight2 = trimmedWeights.reduce((sum, weight) => sum + weight, 0) / trimmedWeights.length;
+      
+      if (averageWeight2 >temsum&&!lastState) {
+          count++;
+      }
+    }
+  }
+  
+  return count;
+}
+
+
 function executeFunctionChain() {
   executeFunction(() => {
     printVariables(() => {
@@ -610,7 +675,7 @@ setInterval(executeFunctionChain, 60*60*1000); // 每隔60分钟执行一次
 const apiUrl = global.APIURL;
 
 function calcuteTask() {
-  global.updateTime = new Date().toISOString();
+  global.updateTime = new Date(+new Date()+8*3600*1000).toISOString();
   updatePastWeekInfo(()=>{
     const body = {
       type:"lastWeek",
@@ -665,7 +730,7 @@ function calcuteTask() {
 
 calcuteTask()
 //sendPostRequest(apiUrl,'/send/updateNodeInfo', body);
-setInterval(calcuteTask,3* 60*1000); 
+setInterval(calcuteTask,60* 60*1000); 
 //sendPostRequest(apiUrl,'/send/queryNodeInfo', body);
 
 function updatePastWeekInfo(callback) {
@@ -676,6 +741,7 @@ function updatePastWeekInfo(callback) {
   
   function checkCompletion() {
     completed += 1;
+    // console.log('global.falseWeekInfo',global.falseWeekInfo)
     // console.log("completed is: ",completed)
     if (completed === 2) {
       processWeekInfo(global.trueWeekInfo, global.falseWeekInfo)
@@ -753,15 +819,11 @@ function updatePastWeekInfo(callback) {
       console.error('Error reading directory:', err);
       return;
     }
-    
     (async () => {
       global.true7FilesAndDates = get7TrueDateFileName(files, "true");
-    
       for (let i = 0; i < global.daysNumber; i++) {
         const entry = global.true7FilesAndDates[i];
-    
-        // 处理 entry 为 null 或缺少属性的情况
-        if (entry && entry.fileName) {
+        if (entry && entry.fileName) {// 处理 entry 为 null 或缺少属性的情况
           const { fileName, date } = entry;
           try {
             const records = await readFileCalculateInfo(global.truePath, fileName);
@@ -774,17 +836,14 @@ function updatePastWeekInfo(callback) {
             console.error('Error processing file:', err);
           }
         } else {
-          // 如果 entry 为 null 或 fileName 不存在，添加 null
           global.trueWeekInfo.push(null);
           // console.log(global.trueWeekInfo, " ** ", i);
         }
-    
         // 在最后一次迭代时调用 checkCompletion
         if (i === global.daysNumber-1) checkCompletion();
       }
     })();
   });
-
   // 读取 false 路径的文件并存储过去global.daysNumber天的信息
   fs.readdir(global.falsePath, (err, files) => {
     if (err) {
@@ -793,22 +852,21 @@ function updatePastWeekInfo(callback) {
     }
     (async () => {
       global.false7FilesAndDates = get7TrueDateFileName(files, "false");
-      console.log(global.false7FilesAndDates);
-
+      // console.log('global.false7FilesAndDates',global.false7FilesAndDates);
       for (let i = 0; i < global.daysNumber; i++) {
-        const { fileName, date } = global.false7FilesAndDates[i];
-        if (fileName) {
-          readFileCalculateInfo(global.falsePath, fileName)
-            .then((records) => {
-              console.log('Parsed false records for day', i + 1, ':', records.length);
-              const continuousRanges = countContinuousRanges(records);
-              const warnContinuousRanges = countSpecialContinuousRanges(records);
-              const lastBox = countContinuousRangesWithWeight(records);
-              global.falseWeekInfo.push({ date, box: lastBox, continuousRanges, warnContinuousRanges });
-            })
-            .catch((err) => {
-              console.error('Error processing file:', err);
-            });
+        const entry = global.false7FilesAndDates[i];
+        if (entry && entry.fileName) {
+          const { fileName, date } = entry;
+          try {
+            const records = await readFileCalculateInfo(global.falsePath, fileName);
+            console.log('Parsed false records for day', i + 1, ':', records.length,'filename is:',fileName);
+            const continuousRanges = countContinuousRangesWarning(records);
+            const warnContinuousRanges = countSpecialContinuousRanges(records);
+            const lastBox = countContinuousRangesWithWeight(records);
+            global.falseWeekInfo.push({ date, box: lastBox, continuousRanges, warnContinuousRanges });
+          } catch (err) {
+            console.error('Error processing file:', err);
+          }
         } else {
           global.falseWeekInfo.push(null);
         }

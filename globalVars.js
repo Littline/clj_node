@@ -1,17 +1,17 @@
-global.testVar = 'This is a global variable';
-global.path = 'E:/guimain-v1.2/detect_result/daily/false/';
+﻿global.testVar = 'This is a global variable';
+// global.path = 'D:/guimain-v1.2/detect_result/daily/false/';
+// global.place="宁波梅山1";
+global.path = 'D:/guimain-v1.2/detect_result/daily/false/';
+global.place='东莞虎门湾20';
 global.errorMessage;
 global.newRecord={};
 global.newLine;
 global.lastRecord={};
 global.lastLine;
-
 global.flag=0;
 // add new global vars to maintain status
-
-
-global.name = '广西钦州';
-global.number='01';
+global.name='东莞虎门湾';
+global.number='20';
 global.APIURL='42.194.238.80';
 global.lastTrue = 0;
 global.lastFalse = 0;
@@ -28,8 +28,10 @@ global.todayWarn = 0;
 global.todayBox = 0;
 global.weight = 1000.4;
 global.updateTime = new Date().toISOString();
-global.falsePath = 'E:/guimain-v1.2/detect_result/daily/false/';
-global.truePath = 'E:/guimain-v1.2/detect_result/daily/true/';
+global.falsePath = 'D:/guimain-v1.2/detect_result/daily/false/';
+global.truePath = 'D:/guimain-v1.2/detect_result/daily/true/';
+global.speed2Threshold = 20;
 global.speed2Threshold = 100;
 global.true7FilesAndDates=[];
 global.daysNumber=15;
+global.emptySpinnerWeight=8600;
