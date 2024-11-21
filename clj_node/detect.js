@@ -445,13 +445,11 @@ function countContinuousRanges(records) {
           start = i;  // 更新新的区间起点
       }
   }
-  // 最后一个区间也需要检查
   if (records.length - start > 60) {
       count++;
   }
   return count;
 }
-
 
 //异常的运行次数，也即报警
 function countContinuousRangesWarning(records) {
@@ -463,7 +461,8 @@ function countContinuousRangesWarning(records) {
     const currentIndex = Math.round(records[i].index);
     const previousIndex = Math.round(records[i - 1].index);
 
-    if (currentIndex !== previousIndex + 1 && Math.round(records[i].event_num)!==Math.round(records[i-1].event_num)) {
+    // if (currentIndex !== previousIndex + 1 && Math.round(records[i].event_num)!==Math.round(records[i-1].event_num)) {
+    if (currentIndex !== previousIndex + 1 ) {
         if (i - start > 60) {  // 判断区间长度是否大于60
             // console.log("i - start",i - start);
             count++;
@@ -473,82 +472,12 @@ function countContinuousRangesWarning(records) {
   }
   // 最后一个区间也需要检查
   if (records.length - start > 60) {
+    // console.log("i - start",count);
       count++;
   }
   return count;
 }
-//故障1
-function countSpecialContinuousRanges1(records) {
-  const sortedRecords = records
-    .map(record => ({ index: parseInt(record.index, 10), speed2: record.motor_speed2 }))
-  let rangeCount = 0;
-  let rangeBegin = null;
-  let rangeEnd = null;
-  let speed2Count = 0;  // Count of Math.abs(record.speed2) < 1 within the current range
-  for (let i = 0; i < sortedRecords.length; i++) {
-    const record = sortedRecords[i];
-    if (rangeBegin === null) {
-      rangeBegin = record.index;
-      rangeEnd = record.index;
-      speed2Count = Math.abs(record.speed2) < 1 ? 1 : 0;
-    } else if (record.index === rangeEnd + 1) {
-      rangeEnd = record.index;
-      if (Math.abs(record.speed2) < 1) {
-        speed2Count++;
-      }
-    } else {
-      if (speed2Count >= global.speed2Threshold && rangeEnd - rangeBegin > 60) {
-        rangeCount++; 
-      }
-      rangeBegin = record.index;
-      rangeEnd = record.index;
-      speed2Count = Math.abs(record.speed2) < 1 ? 1 : 0;
-    }
-  }
-  if (speed2Count >= global.speed2Threshold) {
-    rangeCount++;
-  }
-  return rangeCount;
-}
-//故障（仿照箱量进行计算
-function countSpecialContinuousRanges2(records) {
-  if (records.length === 0) return 0;
-  let count = 0;  // 统计满足条件的区间个数
-  let start = 0;  // 记录当前区间的起始索引
-  let lastState = false;  // 记录上一个有效状态
-  let temsum=global.weight + global.emptySpinnerWeight;
-  temsum=0;
-  for (let i = 1; i < records.length; i++) {
-    if (Math.round(records[i].event_type) === 1) continue;
-    const currentIndex = Math.round(records[i].index);
-    const previousIndex = Math.round(records[i - 1].index);
-    if (currentIndex !== previousIndex + 1 && Math.round(records[i].event_num) !== Math.round(records[i - 1].event_num)) {
-      if (i - start > 60) {  // 判断区间长度是否大于60
-        const rangeWeights = records.slice(start, start+60).map(record => parseFloat(record.weight2.trim()));
-        rangeWeights.sort((a, b) => a - b);
-        const trimmedWeights = rangeWeights.slice(20, rangeWeights.length - 20);
-        // console.log("rangeWeights",rangeWeights.length)
-        const averageWeight2 = trimmedWeights.reduce((sum, weight) => sum + weight, 0) / trimmedWeights.length;
 
-        const rangeSpeed2s = records.slice(start, i).map(record => parseFloat(record.motor_speed2.trim()));
-        const speed2Count=rangeSpeed2s.filter(speed2 => Math.abs(speed2) < 1).length;
-        
-        if (averageWeight2 >temsum) {
-          // 只有当状态变化时才增加计数
-          if (!lastState&&speed2Count>=global.speed2Threshold) {
-            console.log("rangeWeights.length",rangeWeights.length,"rangeSpeed2s.length",rangeSpeed2s.length,"rangeSpeed2s",rangeSpeed2s)
-            count++;
-            lastState = true;  // 更新状态，表示已增加过计数
-          }
-        } else {
-          lastState = false;  // 如果不满足条件，重置状态
-        }
-        
-      }
-      start = i;  // 更新新的区间起点
-    }
-  }
-}
 
   //故障（仿照运行次数进行计算
 function countSpecialContinuousRanges(records) {
@@ -561,7 +490,8 @@ function countSpecialContinuousRanges(records) {
     if (Math.round(records[i].event_type) === 1) continue;
     const currentIndex = Math.round(records[i].index);
     const previousIndex = Math.round(records[i - 1].index);
-    if (currentIndex !== previousIndex + 1 && Math.round(records[i].event_num) !== Math.round(records[i - 1].event_num)) {
+  // if (currentIndex !== previousIndex + 1 && Math.round(records[i].event_num)!==Math.round(records[i-1].event_num)) {
+    if (currentIndex !== previousIndex + 1 ) {
       if (i - start > 60) {  // 判断区间长度是否大于60
         //根据前60条记录计算重量
         const rangeWeights = records.slice(start, start+60).map(record => parseFloat(record.weight2.trim()));
