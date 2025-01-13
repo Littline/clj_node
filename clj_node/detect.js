@@ -3,19 +3,19 @@ require('./globalVars');  // 引入并赋值给 local variable
 
 const motorSpeed2Rule = require('./alarmRules');
 const sendEmail = require('./sendmail');
-const path = global.path;
+const path1 = global.path;
 let lastDate=null;
 let lastLines=null;
 let newDate=null;
 let newLines=null;
 const http = require('http');
 
-function sendPostRequest(url,path, body) {
+function sendPostRequest(url,path1, body) {
     const data = JSON.stringify(body);
     const options = {
         hostname: url,
         port: 8081, 
-        path: path,
+        path: path1,
         method: 'POST',
         headers: {
             'Content-Type': 'application/json; charset=UTF-8',
@@ -123,7 +123,7 @@ function get7TrueDateFileName(files, trueOrFalse) {
 // 2.读取文件内容
 function readFileContent(fileName) {
   return new Promise((resolve, reject) => {
-    fs.readFile(path + fileName, 'utf8', (err, data) => {
+    fs.readFile(path1 + fileName, 'utf8', (err, data) => {
       if (err) {
         console.error('Error reading file:', err);
         reject(err);
@@ -162,7 +162,7 @@ function readFileContent(fileName) {
 // 3.定时执行函数，主函数
 function executeFunction(callback) {
   // 获取文件夹下所有文件的文件名，并找出日期最大的一天
-  fs.readdir(path, (err, files) => {
+  fs.readdir(path1, (err, files) => {
     if (err) {
       console.error('Error reading directory:', err);
       return;
@@ -806,3 +806,302 @@ function updatePastWeekInfo(callback) {
     })();
   });
 }
+const path = require('path');
+const parentDir = path.resolve(global.path, '..');
+const STATE_FILE = path.join(parentDir, 'processing_state.json');
+console.log('STATE_FILE  ', STATE_FILE);
+console.log('上一级目录:', parentDir);
+const allFileNames = getAllFileNames(global.falsePath);
+
+function getAllFileNames(directoryPath) {
+  try {
+    // 读取目录下的所有文件和子目录
+    const files = fs.readdirSync(directoryPath);
+    
+    // 过滤出文件（排除子目录）
+    const fileNames = files.filter(file => {
+      const filePath = path.join(directoryPath, file);
+      return fs.statSync(filePath).isFile();
+    });
+
+    return fileNames;
+  } catch (err) {
+    console.error('读取目录时出错:', err);
+    return [];
+  }
+}
+
+// function getFilesToProcess() {
+//   const state = readState();
+//   const allFiles = getAllFileNames(global.falsePath);
+//   console.log('全部文件:', allFiles);
+
+//   let filesToProcess = allFiles.filter(file => !state.processedFiles.includes(file));
+
+//   return filesToProcess;
+// }
+function getFilesToProcess() {
+  const state = readState();
+  const allFiles = getAllFileNames(global.falsePath);
+  console.log('全部文件:', allFiles);
+
+  const today = new Date();
+  const year = today.getFullYear();
+  const month = String(today.getMonth() + 1).padStart(2, '0'); // 月份从0开始，需要加1
+  const day = String(today.getDate()).padStart(2, '0');
+  const todayStr = `${year}-${month}-${day}`;
+  console.log('今日日期:', todayStr);
+
+  // 过滤掉已处理的文件和包含今日日期的文件
+  let filesToProcess = allFiles.filter(file => {
+    const isProcessed = state.processedFiles.includes(file);
+    const isToday = file.includes(todayStr);
+    return !isProcessed && !isToday;
+  });
+
+  console.log('需要处理的文件:', filesToProcess);
+  return filesToProcess;
+}
+
+function readState() {
+  if (fs.existsSync(STATE_FILE)) {
+    const data = fs.readFileSync(STATE_FILE, 'utf-8');
+    try {
+      const parsedData = JSON.parse(data);
+      return {
+        processedFiles: parsedData.processedFiles || []
+      };
+    } catch (err) {
+      console.error('状态文件解析错误:', err);
+      return {
+        processedFiles: []
+      };
+    }
+  } else {
+    // 初始化状态
+    return {
+      processedFiles: []
+    };
+  }
+}
+
+// append写入状态文件
+function writeState(newProcessedFiles) {
+  // 确保目录存在
+  const dir = path.dirname(STATE_FILE);
+  if (!fs.existsSync(dir)) {
+    fs.mkdirSync(dir, { recursive: true });
+  }
+
+  // 读取现有状态
+  const state = readState();
+
+  // 使用 Set 确保唯一性，防止重复添加
+  const updatedProcessedFiles = Array.from(new Set([...state.processedFiles, ...newProcessedFiles]));
+
+  const stateToWrite = {
+    processedFiles: updatedProcessedFiles
+  };
+
+  // 写入状态文件
+  fs.writeFileSync(STATE_FILE, JSON.stringify(stateToWrite, null, 2), 'utf-8'); // 使用缩进2更易读
+}
+function formatTime(timeString) {
+  const date = new Date(timeString);
+  if (isNaN(date.getTime())) {
+      console.error(`Invalid time string: ${timeString}`);
+      return null;
+  }
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  const hours = String(date.getHours()).padStart(2, '0');
+  const minutes = String(date.getMinutes()).padStart(2, '0');
+  const seconds = String(date.getSeconds()).padStart(2, '0');
+  return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
+}
+async function sendWarningData(intervalRecords, fileName) {
+  // 确保 intervalRecords 中有数据
+  if (intervalRecords.length === 0) {
+    console.warn(`文件 ${fileName} 的区间记录为空，跳过发送。`);
+    return;
+  }
+
+  // 仅处理当前区间内的数据
+  const motor_speed2 = intervalRecords.map(record => parseFloat(record.motor_speed2.trim()));
+  const weight2 = intervalRecords.map(record => parseFloat(record.weight2.trim()));
+  const rawTime = intervalRecords[0].time; // e.g., "2024-11-04 00:00:03.620604"
+  const formattedTime = formatTime(rawTime);
+  const length = weight2.length;
+  console.log('time is: ',formattedTime)
+
+  const body = {
+    number: `${global.number}`,
+    name: `${global.name}`,
+    motor_speed2: motor_speed2, // 确保字段名与API一致
+    weight2: weight2,
+    time: formattedTime, // "yyyy-MM-dd HH:mm"
+    length: length,
+    token: 'clj168168'
+  };
+
+  try {
+    const response = await sendPostRequest1(apiUrl, '/send/insertHistoryRecord', body);
+    console.log('报警数据发送成功:', response);
+
+    // 解析响应并检查 success 字段
+    const responseJson = JSON.parse(response);
+    if (!responseJson.success) {
+      console.error(`报警数据发送失败: ${responseJson.errorMsg}`);
+      throw new Error(`报警数据发送失败: ${responseJson.errorMsg}`);
+    }
+  } catch (err) {
+    console.error('发送报警数据失败:', err);
+    // 可根据需要添加重试逻辑或报警机制
+    throw err; // 重新抛出错误以便外层捕获
+  }
+}
+async function sendPostRequest1(url, path, body) {
+  const data = JSON.stringify(body);
+
+  const options = {
+    hostname: url,
+    port: 8081, // 如果使用HTTPS，则为443
+    path: path,
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Content-Length': Buffer.byteLength(data)
+    }
+  };
+  return new Promise((resolve, reject) => {
+    const req = http.request(options, res => {
+      let responseData = '';
+      res.on('data', chunk => {
+        responseData += chunk;
+      });
+      res.on('end', () => {
+        resolve(responseData);
+      });
+    });
+    req.on('error', error => {
+      reject(error);
+    });
+    req.write(data);
+    req.end();
+  });
+}
+// 统计并发送满足条件的报警区间
+async function countAndSendContinuousRangesWarning(records, fileName) {
+  if (records.length === 0) return 0;
+
+  let count = 0; // 统计满足条件的区间个数
+  let start = 0; // 记录当前区间的起始索引
+
+  // 收集所有发送报警数据的 Promise
+  const sendPromises = [];
+
+  for (let i = 1; i < records.length; i++) {
+    // 跳过 event_type 为 1 的记录
+    if (Math.round(records[i].event_type) === 1) continue;
+
+    const currentIndex = Math.round(records[i].index);
+    const previousIndex = Math.round(records[i - 1].index);
+
+    if (currentIndex !== previousIndex + 1) {
+      // 检查当前区间长度是否大于60
+      if (i - start > 60) {
+        const intervalRecords = records.slice(start, i);
+        // 发送报警数据并收集 Promise
+        const sendPromise = sendWarningData(intervalRecords, fileName)
+          .then(() => {
+            count++;
+          })
+          .catch(err => {
+            console.error(`发送报警数据失败，文件: ${fileName}, 区间: ${start}-${i - 1}`, err);
+            // 根据需要，可以选择不抛出错误以继续处理其他区间
+          });
+        sendPromises.push(sendPromise);
+      }
+      start = i; // 更新新的区间起点
+    }
+  }
+
+  // 检查最后一个区间
+  if (records.length - start > 60) {
+    const intervalRecords = records.slice(start, records.length);
+    const sendPromise = sendWarningData(intervalRecords, fileName)
+      .then(() => {
+        count++;
+      })
+      .catch(err => {
+        console.error(`发送报警数据失败，文件: ${fileName}, 区间: ${start}-${records.length - 1}`, err);
+        // 根据需要，可以选择不抛出错误以继续处理其他区间
+      });
+    sendPromises.push(sendPromise);
+  }
+
+  // 等待所有报警数据发送完成
+  await Promise.all(sendPromises);
+
+  return count;
+}
+
+// 处理单个文件
+async function processFile(fileName) {
+  try {
+    const records = await readFileCalculateInfo(global.falsePath, fileName);
+    console.log('Parsed records:', records.length);
+
+    // 统计并发送报警区间
+    const sentCount = await countAndSendContinuousRangesWarning(records, fileName);
+    console.log(`文件 ${fileName} 处理完成，发送了 ${sentCount} 个报警区间。`);
+
+    if (sentCount > 0) {
+      // 如果有发送成功的报警区间，标记文件为已处理
+      writeState([fileName]);
+      console.log(`文件 ${fileName} 已标记为已处理。`);
+    } else {
+      console.log(`文件 ${fileName} 中没有需要发送的报警区间。`);
+    }
+
+  } catch (err) {
+    console.error(`Error processing file ${fileName}:`, err);
+    // 可根据需要添加错误处理逻辑，例如重试机制
+  }
+}
+
+// 发送历史数据的函数
+async function sendHistoricalData() {
+  const filesToProcessList = getFilesToProcess();
+  console.log('待处理的文件列表:', filesToProcessList);
+
+  for (const fileName of filesToProcessList) {
+    console.log(`开始处理文件: ${fileName}`);
+    await processFile(fileName);
+    console.log(`完成处理文件: ${fileName}`);
+  }
+
+  console.log('所有待处理文件已完成处理。');
+}
+
+sendHistoricalData()
+  .then(result => {
+    console.log('历史数据发送成功:', result);
+  })
+  .catch(err => {
+    console.error('发送历史数据任务失败:', err);
+  });
+
+// 设置每天发送两次（每 12 小时）
+const twelveHoursInMilliseconds = 12 * 60 * 60 * 1000;
+
+setInterval(() => {
+  sendHistoricalData()
+    .then(result => {
+      console.log('定时任务：历史数据发送成功:', result);
+    })
+    .catch(err => {
+      console.error('定时任务：发送历史数据失败:', err);
+    });
+}, twelveHoursInMilliseconds);
