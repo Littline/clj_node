@@ -12,7 +12,7 @@ async function sendEmailWithRetry(mailOptions, maxRetries = 3, retryDelay = 3000
             secure: true,   
             auth: {  
                 user: "jiuzheng_su@163.com",   
-                pass: "ZNGSDOCERJEEUDII",  
+                pass: "",  
             },  
         });  
   
